@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "flibusta": {
+      "command": "uv",
+      "args": ["run", "flibusta_mcp.py"],
+      "cwd": "/Users/mikhail/w/learning/mcp_books"
+    }
+  }
+}

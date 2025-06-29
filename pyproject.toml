@@ -1,0 +1,29 @@
+[project]
+name = "claude"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.12"
+dependencies = [
+    "aiofiles>=24.1.0",
+    "aiohttp>=3.12.13",
+    "beautifulsoup4>=4.13.4",
+    "gmail-mcp-server>=0.1.1",
+    "httpx>=0.28.1",
+    "lxml>=6.0.0",
+    "mcp[cli]>=1.10.1",
+    "pytest>=8.4.1",
+    "pytest-asyncio>=1.0.0",
+    "ruff>=0.12.1",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "S", "I"]
+ignore = ["S101"]
+
+[tool.uv.workspace]
+members = ["claude-agent"]
+

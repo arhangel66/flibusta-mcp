@@ -71,17 +71,7 @@ def test_parse_book_details(parser, book_html):
     assert book.title == expected_title
     assert book.authors == ["Шон Кови"]
     assert book.year == 2023
-    assert book.file_size == "4439K"
     assert "внутренняя потребность" in book.description
-
-    # Check download links - updated to match new structure
-    expected_links = {
-        "read": "/b/727250/read",
-        "fb2": "/b/727250/fb2",
-        "epub": "/b/727250/epub",
-        "mobi": "/b/727250/mobi",
-    }
-    assert book.download_links == expected_links
 
 
 @pytest.fixture

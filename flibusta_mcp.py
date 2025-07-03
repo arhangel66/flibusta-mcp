@@ -58,7 +58,7 @@ async def search_books_by_author(
         sort_by: Sort order - "date" (newest first) or "default" (by series)
 
     Returns:
-        Formatted list of author's books with download links and dates (when available)
+        Formatted list of author's books with dates (when available)
     """
     async with service.client:
         books = await service.search_books_by_author(
@@ -76,7 +76,7 @@ async def get_book_details(book_id: str) -> Book:
         book_id: Book ID from search results
 
     Returns:
-        Detailed book information including description and download links
+        Detailed book information including description
     """
     async with service.client:
         book = await service.get_book_details(book_id)

@@ -318,12 +318,6 @@ class FlibustaParser:
         if year_match:
             year = int(year_match.group(1))
 
-        # Extract file size from the line with size info
-        file_size = None
-        size_match = re.search(r'<span style="?size"?>(\d+K)', html)
-        if size_match:
-            file_size = size_match.group(1)
-
         # Extract description - look for text after <h2>Аннотация</h2>
         description = ""
         annotation_header = soup.find("h2", string="Аннотация")
@@ -352,43 +346,13 @@ class FlibustaParser:
 
             description = " ".join(desc_parts).strip()
 
-        # Extract download links from actual HTML structure
-        download_links = self.extract_download_links(html)
-
         return Book(
             id=book_id,
             title=title,
             authors=authors,
             year=year,
-            file_size=file_size,
             description=description,
-            download_links=download_links,
         )
-
-    def extract_download_links(self, html: str) -> dict[str, str]:
-        """Extract download links from book page."""
-        soup = BeautifulSoup(html, "lxml")
-        download_links = {}
-
-        # Find download links in the main content area
-        # Look for patterns like: скачать: <a href="/b/831271/fb2">(fb2)</a> - <a href="/b/831271/epub">(epub)</a>
-        content_area = soup.find("div", id="main")
-        if content_area:
-            # Find all download links
-            for link in content_area.find_all("a"):
-                href = link.get("href", "")
-                text = link.get_text(strip=True)
-
-                if "/fb2" in href and text == "(fb2)":
-                    download_links["fb2"] = href
-                elif "/epub" in href and text == "(epub)":
-                    download_links["epub"] = href
-                elif "/mobi" in href and text == "(mobi)":
-                    download_links["mobi"] = href
-                elif "/read" in href and text == "(читать)":
-                    download_links["read"] = href
-
-        return download_links
 
     def parse_author_series(self, html: str) -> list[dict]:
         """Parse series list from author page."""

@@ -92,22 +92,30 @@ class FlibustaParser:
 
         return books
 
-    def parse_author_books(self, html: str) -> list[Book]:
+    def parse_author_books(self, html: str, author_name: str = None) -> list[Book]:
         """Parse books from author page."""
         soup = BeautifulSoup(html, "lxml")
+
+        # Extract author name from page title if not provided
+        if not author_name:
+            title_element = soup.find("h1", class_="title")
+            if title_element:
+                author_name = title_element.get_text(strip=True)
 
         # Check if this is a date-sorted page (has h4 tags with dates)
         date_headers = soup.find_all("h4")
         if date_headers and self._is_date_format(date_headers[0].get_text(strip=True)):
-            return self._parse_author_books_with_dates(soup)
+            return self._parse_author_books_with_dates(soup, author_name)
         else:
-            return self._parse_author_books_with_series(soup)
+            return self._parse_author_books_with_series(soup, author_name)
 
     def _is_date_format(self, text: str) -> bool:
         """Check if text is in date format DD.MM.YYYY."""
         return bool(re.match(r"\d{2}\.\d{2}\.\d{4}", text))
 
-    def _parse_author_books_with_dates(self, soup: BeautifulSoup) -> list[Book]:
+    def _parse_author_books_with_dates(
+        self, soup: BeautifulSoup, author_name: str = None
+    ) -> list[Book]:
         """Parse books from author page with date sorting."""
         books = []
         current_date = None
@@ -144,7 +152,9 @@ class FlibustaParser:
                     book_id = href.split("/b/")[-1] if "/b/" in href else ""
 
                     if book_id and book_id not in seen_book_ids:
-                        book = self._parse_book_from_element(element, book_link)
+                        book = self._parse_book_from_element(
+                            element, book_link, author_name
+                        )
                         if book:
                             book.added_date = current_date
                             books.append(book)
@@ -152,7 +162,9 @@ class FlibustaParser:
 
         return books
 
-    def _parse_author_books_with_series(self, soup: BeautifulSoup) -> list[Book]:
+    def _parse_author_books_with_series(
+        self, soup: BeautifulSoup, author_name: str = None
+    ) -> list[Book]:
         """Parse books from author page with series grouping."""
         books = []
         seen_book_ids = set()
@@ -177,14 +189,16 @@ class FlibustaParser:
             book_id = href.split("/b/")[-1] if "/b/" in href else ""
 
             if book_id and book_id not in seen_book_ids:
-                book = self._parse_book_from_element(link.parent, link)
+                book = self._parse_book_from_element(link.parent, link, author_name)
                 if book:
                     books.append(book)
                     seen_book_ids.add(book_id)
 
         return books
 
-    def _parse_book_from_element(self, parent_element, book_link) -> Book | None:
+    def _parse_book_from_element(
+        self, parent_element, book_link, author_name: str = None
+    ) -> Book | None:
         """Parse a single book from its container element."""
         href = book_link.get("href", "")
         book_id = href.split("/b/")[-1] if "/b/" in href else ""
@@ -197,22 +211,33 @@ class FlibustaParser:
         if not title:
             return None
 
-        # Extract authors (translators)
+        # Extract authors - if we're on author page, the main author is known
         authors = []
-        if parent_element:
-            parent_text = parent_element.get_text()
+        if author_name:
+            # We're on author page, so this is the main author
+            authors = [author_name]
+        else:
+            # Generic parsing - look for author links but exclude translators
+            if parent_element:
+                parent_text = parent_element.get_text()
 
-            # Check if there's translator info
-            if "(пер." in parent_text:
-                # Find translator links
-                author_links = parent_element.find_all("a", href=re.compile(r"/a/\d+"))
-                for author_link in author_links:
-                    author_name = author_link.get_text(strip=True)
-                    if author_name not in authors:
-                        authors.append(author_name)
-            else:
-                # If no specific translator, assume it's the main author
-                authors = ["Unknown Author"]
+                # If there's translator info, skip them and look for actual authors
+                if "(пер." in parent_text:
+                    # For translated books, the main author is usually not explicitly mentioned
+                    # in the book line, so we can't determine it from this context
+                    authors = ["Unknown Author"]
+                else:
+                    # Look for author links (not translators)
+                    author_links = parent_element.find_all(
+                        "a", href=re.compile(r"/a/\d+")
+                    )
+                    for author_link in author_links:
+                        author_name_text = author_link.get_text(strip=True)
+                        if author_name_text not in authors:
+                            authors.append(author_name_text)
+
+                    if not authors:
+                        authors = ["Unknown Author"]
 
         # Extract series information
         series_name = None
@@ -251,38 +276,83 @@ class FlibustaParser:
         """Parse detailed book information from book page."""
         soup = BeautifulSoup(html, "lxml")
 
-        # Extract book ID from URL (assume it's passed separately)
-        book_id = "727250"  # This should be extracted from URL
+        # Extract book ID from script tag
+        book_id = "unknown"
+        script_text = soup.find("script", string=re.compile(r"var bookId"))
+        if script_text:
+            match = re.search(r"var bookId = (\d+)", script_text.string)
+            if match:
+                book_id = match.group(1)
 
-        # Extract title
-        title_element = soup.find("h1")
+        # Extract title from h1, remove (fb2) suffix
+        title_element = soup.find("h1", class_="title")
         title = title_element.text.strip() if title_element else ""
+        title = re.sub(r"\s*\(fb2\)\s*$", "", title)  # Remove (fb2) suffix
 
-        # Extract authors
+        # Extract authors - only the first author link, before (перевод:...)
         authors = []
-        author_links = soup.find_all("a", href=re.compile(r"/a/\d+"))
-        for link in author_links:
-            authors.append(link.text.strip())
+        # Find the line with author info (usually after h1 title)
+        content_area = soup.find("div", id="main")
+        if content_area:
+            # Look for author links that are NOT inside translation parentheses
+            author_line = content_area.get_text()
 
-        # Extract year
+            # Find the first author link before "(перевод:"
+            first_author_link = content_area.find("a", href=re.compile(r"/a/\d+"))
+            if first_author_link:
+                # Check if this link comes before translation info
+                link_text = first_author_link.get_text(strip=True)
+                full_text = content_area.get_text()
+                link_pos = full_text.find(link_text)
+                translation_pos = full_text.find("(перевод:")
+
+                if translation_pos == -1 or link_pos < translation_pos:
+                    authors.append(link_text)
+
+        if not authors:
+            authors = ["Unknown Author"]
+
+        # Extract year from text
         year = None
-        year_match = re.search(r"Год:\s*(\d{4})", soup.text)
+        year_match = re.search(r"издание (\d{4}) г\.", soup.text)
         if year_match:
             year = int(year_match.group(1))
 
-        # Extract file size
+        # Extract file size from the line with size info
         file_size = None
-        size_match = re.search(r"Размер файла:\s*(\d+K)", soup.text)
+        size_match = re.search(r'<span style="?size"?>(\d+K)', html)
         if size_match:
             file_size = size_match.group(1)
 
-        # Extract description
+        # Extract description - look for text after <h2>Аннотация</h2>
         description = ""
-        desc_div = soup.find("div", class_="description")
-        if desc_div:
-            description = desc_div.get_text(separator=" ", strip=True)
+        annotation_header = soup.find("h2", string="Аннотация")
+        if annotation_header:
+            # Get the next sibling paragraph(s)
+            current = annotation_header.next_sibling
+            desc_parts = []
+            while current:
+                if current.name == "p":
+                    desc_parts.append(current.get_text(strip=True))
+                elif (
+                    current.name == "br"
+                    and current.next_sibling
+                    and current.next_sibling.name != "h2"
+                ):
+                    # Continue to next element
+                    pass
+                elif current.name in ["h2", "hr", "form", "table"] or (
+                    hasattr(current, "get") and current.get("id")
+                ):
+                    # Stop at next major element
+                    break
+                elif isinstance(current, str) and current.strip():
+                    desc_parts.append(current.strip())
+                current = current.next_sibling
 
-        # Extract download links
+            description = " ".join(desc_parts).strip()
+
+        # Extract download links from actual HTML structure
         download_links = self.extract_download_links(html)
 
         return Book(
@@ -300,19 +370,23 @@ class FlibustaParser:
         soup = BeautifulSoup(html, "lxml")
         download_links = {}
 
-        # Find download links section
-        download_section = soup.find("div", class_="download-links")
-        if not download_section:
-            return download_links
+        # Find download links in the main content area
+        # Look for patterns like: скачать: <a href="/b/831271/fb2">(fb2)</a> - <a href="/b/831271/epub">(epub)</a>
+        content_area = soup.find("div", id="main")
+        if content_area:
+            # Find all download links
+            for link in content_area.find_all("a"):
+                href = link.get("href", "")
+                text = link.get_text(strip=True)
 
-        # Extract all download links
-        for link in download_section.find_all("a"):
-            href = link.get("href", "")
-
-            if "/epub" in href:
-                download_links["epub"] = href
-            elif "/download" in href:
-                download_links["download"] = href
+                if "/fb2" in href and text == "(fb2)":
+                    download_links["fb2"] = href
+                elif "/epub" in href and text == "(epub)":
+                    download_links["epub"] = href
+                elif "/mobi" in href and text == "(mobi)":
+                    download_links["mobi"] = href
+                elif "/read" in href and text == "(читать)":
+                    download_links["read"] = href
 
         return download_links
 

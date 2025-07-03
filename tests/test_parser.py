@@ -74,6 +74,50 @@ def test_parse_book_details(parser, book_html):
     assert book.file_size == "4439K"
     assert "внутренняя потребность" in book.description
 
-    # Check download links
-    expected_links = {"epub": "/b/727250/epub", "download": "/b/727250/download"}
+    # Check download links - updated to match new structure
+    expected_links = {
+        "read": "/b/727250/read",
+        "fb2": "/b/727250/fb2",
+        "epub": "/b/727250/epub",
+        "mobi": "/b/727250/mobi",
+    }
     assert book.download_links == expected_links
+
+
+@pytest.fixture
+def author_page_html():
+    test_data_path = Path(__file__).parent.parent / "test_data"
+    with open(test_data_path / "author_5803_default.html", "r", encoding="utf-8") as f:
+        return f.read()
+
+
+def test_parse_author_books_with_correct_author(parser, author_page_html):
+    """Test parsing author books page with correct author identification."""
+    # Parse with author name provided
+    books = parser.parse_author_books(author_page_html, "Стивен Кинг")
+
+    # Should have books
+    assert len(books) > 0
+
+    # Check that authors are correctly identified (not translators)
+    for book in books[:5]:  # Check first 5 books
+        assert book.authors == ["Стивен Кинг"], (
+            f"Book {book.title} has wrong authors: {book.authors}"
+        )
+        assert book.id is not None
+        assert book.title is not None
+
+
+def test_parse_author_books_extracts_author_name(parser, author_page_html):
+    """Test that parser can extract author name from page."""
+    # Parse without author name provided - should extract from HTML
+    books = parser.parse_author_books(author_page_html)
+
+    # Should have books
+    assert len(books) > 0
+
+    # Check that author name was extracted correctly
+    for book in books[:5]:  # Check first 5 books
+        assert book.authors == ["Стивен Кинг"], (
+            f"Book {book.title} has wrong authors: {book.authors}"
+        )

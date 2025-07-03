@@ -30,7 +30,11 @@ class FlibustaService:
         """Get books by specific author."""
         order = "date" if sort_by == "date" else "default"
         html = await self.client.get_author_books_page(author_id, order=order)
-        books = self.parser.parse_author_books(html)
+
+        # Extract author name from the page for correct parsing
+        author_name = self._extract_author_name_from_html(html)
+
+        books = self.parser.parse_author_books(html, author_name)
 
         # Apply sorting
         if sort_by == "date":
@@ -85,6 +89,16 @@ class FlibustaService:
             safe_title = safe_title[:97] + "..."
         return safe_title
 
+    def _extract_author_name_from_html(self, html: str) -> str | None:
+        """Extract author name from author page HTML."""
+        from bs4 import BeautifulSoup
+
+        soup = BeautifulSoup(html, "lxml")
+        title_element = soup.find("h1", class_="title")
+        if title_element:
+            return title_element.get_text(strip=True)
+        return None
+
     async def get_author_series(self, author_id: str) -> list[dict]:
         """Get all series for specific author."""
         html = await self.client.get_author_books_page(author_id)
@@ -93,4 +107,5 @@ class FlibustaService:
     async def get_series_books(self, series_id: str) -> list[Book]:
         """Get books from specific series."""
         html = await self.client.get_series_page(series_id)
-        return self.parser.parse_author_books(html)
+        # For series pages, we don't have a single author, so pass None
+        return self.parser.parse_author_books(html, None)

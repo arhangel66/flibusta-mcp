@@ -1,8 +1,7 @@
-from dataclasses import dataclass
+from pydantic import BaseModel
 
 
-@dataclass
-class Book:
+class Book(BaseModel):
     id: str
     title: str
     authors: list[str]
@@ -15,8 +14,7 @@ class Book:
     added_date: str | None = None
 
 
-@dataclass
-class Author:
+class Author(BaseModel):
     id: str
     name: str
     books_count: int

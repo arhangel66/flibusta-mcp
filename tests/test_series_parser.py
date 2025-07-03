@@ -144,11 +144,18 @@ def test_parse_book_without_series(parser):
     book_link = soup.find("a", href="/b/830578")
     parent_element = book_link.parent
 
+    # Test without author name provided (should not include translator)
     book = parser._parse_book_from_element(parent_element, book_link)
-
     assert book is not None
     assert book.id == "830578"
     assert book.title == "Четыре сезона"
     assert book.series_name is None
     assert book.series_id is None
-    assert "Виктор Вячеславович Антонов" in book.authors
+    # Translators should NOT be in authors list
+    assert book.authors == ["Unknown Author"]
+
+    # Test with author name provided (should use provided author)
+    book_with_author = parser._parse_book_from_element(
+        parent_element, book_link, "Стивен Кинг"
+    )
+    assert book_with_author.authors == ["Стивен Кинг"]
